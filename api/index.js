@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 
 // Update path karena pindah ke folder api/
-require('../database'); 
+const db = require('../database'); 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +12,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Ensure DB is ready
+app.use(async (req, res, next) => {
+  await db.initIfNeeded();
+  next();
+});
 
 // Static: uploads & frontend (Update path)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
