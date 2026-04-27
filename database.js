@@ -1,105 +1,251 @@
-// Gunakan node:sqlite — built-in Node.js v22+
 const { DatabaseSync } = require('node:sqlite');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+require('dotenv').config();
 
-const DB_PATH = path.join(__dirname, 'data.db');
-const db = new DatabaseSync(DB_PATH);
+let db;
+const isProd = process.env.DATABASE_URL ? true : false;
 
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
-
-// ─── Migrations (safe: diabaikan jika kolom sudah ada) ───────────
-try { db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT 'cod'"); } catch {}
-try { db.exec("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'belum_bayar'"); } catch {}
-
-// ─── Create Tables ─────────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT DEFAULT 'admin',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    category TEXT NOT NULL,
-    price INTEGER NOT NULL,
-    description TEXT DEFAULT '',
-    image_filename TEXT DEFAULT '',
-    stock INTEGER DEFAULT 1,
-    is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_code TEXT UNIQUE NOT NULL,
-    customer_name TEXT NOT NULL,
-    customer_phone TEXT NOT NULL,
-    customer_address TEXT DEFAULT '',
-    delivery_type TEXT NOT NULL,
-    total_price INTEGER NOT NULL,
-    status TEXT DEFAULT 'menunggu',
-    payment_method TEXT DEFAULT 'cod',
-    payment_status TEXT DEFAULT 'belum_bayar',
-    notes TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS order_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id INTEGER NOT NULL,
-    product_id INTEGER,
-    product_name TEXT NOT NULL,
-    product_price INTEGER NOT NULL,
-    quantity INTEGER NOT NULL,
-    subtotal INTEGER NOT NULL,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
-  );
-`);
-
-// ─── Seed Admin ─────────────────────────────────────────────────
-const existingAdmin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
-if (!existingAdmin) {
-  const hashed = bcrypt.hashSync('dapurbibi123', 10);
-  db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run('admin', hashed, 'admin');
-  console.log('✅ Admin seeded: admin / dapurbibi123');
+if (isProd) {
+  // Use PostgreSQL (Supabase)
+  db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  
+  // Wrapper for PG to match SQLite API enough for our needs
+  db.execute = async (sql, params = []) => {
+    return await db.query(sql, params);
+  };
+  db.exec = async (sql) => {
+    return await db.query(sql);
+  };
+  db.prepare = (sql) => {
+    return {
+      run: async (...params) => await db.query(sql.replace(/\?/g, (match, i) => `$${params.indexOf(params[0]) + 1}`), params),
+      get: async (...params) => {
+        const res = await db.query(sql.replace(/\?/g, (match, i) => `$${params.indexOf(params[0]) + 1}`), params);
+        return res.rows[0];
+      },
+      all: async (...params) => {
+        const res = await db.query(sql.replace(/\?/g, (match, i) => `$${params.indexOf(params[0]) + 1}`), params);
+        return res.rows;
+      }
+    };
+  };
+} else {
+  // Use SQLite (Local)
+  const sqlite = new DatabaseSync(path.join(__dirname, 'data.db'));
+  db = sqlite;
+  db.execute = (sql, params = []) => db.prepare(sql).run(...params);
+  // SQLite already has .exec and .prepare
 }
 
-// ─── Seed Products ───────────────────────────────────────────────
-const productCount = db.prepare('SELECT COUNT(*) as c FROM products').get();
-if (productCount.c === 0) {
-  const products = [
-    { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng dengan telur mata sapi, ayam suwir, dan kerupuk. Bumbu rempah pilihan yang lezat dan menggugah selera.', image: 'product-nasi-goreng.png' },
-    { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng dengan cita rasa khas Jawa, dilengkapi sayuran segar, telur, dan taburan bawang goreng.', image: 'product-mie-goreng.png' },
-    { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam pilihan dibakar dengan marinasi madu dan rempah pilihan, disajikan dengan nasi putih hangat.', image: 'product-ayam-bakar.png' },
-    { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto ayam kuning segar dengan bihun, telur rebus, dan kerupuk. Kuah gurih khas nusantara.', image: 'product-soto-ayam.png' },
-    { name: 'Nasi Uduk Komplit', category: 'Makan Berat', price: 18000, description: 'Nasi uduk gurih dengan lauk ayam goreng, tempe orek, tahu, dan sambal kacang.' },
-    { name: 'Tempe Orek Pedas', category: 'Lauk Pauk', price: 8000, description: 'Tempe goreng orek dengan cabai merah dan bawang, renyah manis pedas.' },
-    { name: 'Sayur Bening Bayam', category: 'Lauk Pauk', price: 7000, description: 'Sayur bening bayam jagung segar yang menyehatkan, bumbu sederhana yang segar.' },
-    { name: 'Telur Dadar Bumbu', category: 'Lauk Pauk', price: 8000, description: 'Telur dadar tebal dengan bumbu bawang merah, tomat, dan daun bawang segar.' },
-    { name: 'Ayam Goreng Kremes', category: 'Lauk Pauk', price: 15000, description: 'Ayam goreng dengan balutan kremes renyah dan bumbu kuning yang meresap sempurna.' },
-    { name: 'Risoles Mayo', category: 'Camilan', price: 5000, description: 'Risoles isi ragout ayam dan wortel, dilapisi telur dan tepung roti, digoreng hingga renyah keemasan.' },
-    { name: 'Pisang Goreng Crispy', category: 'Camilan', price: 12000, description: 'Pisang goreng dengan balutan tepung crispy gurih, disajikan 3 buah per porsi.' },
-    { name: 'Bakwan Jagung', category: 'Camilan', price: 5000, description: 'Bakwan jagung manis gurih, digoreng hingga kecoklatan sempurna.' },
-    { name: 'Es Teh Manis', category: 'Minuman', price: 5000, description: 'Teh manis dingin yang menyegarkan.' },
-    { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk peras segar dengan es, tanpa bahan pengawet. Segar dan kaya vitamin C.', image: 'product-es-jeruk.png' },
-    { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Jus alpukat creamy dengan susu kental manis dan gula aren.', image: 'product-jus-alpukat.png' },
-    { name: 'Es Cincau Hitam', category: 'Minuman', price: 7000, description: 'Minuman tradisional cincau hitam dengan santan dan gula merah.' },
-  ];
+async function initDB() {
+  const createTablesSQL = isProd ? `
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
 
-  const insert = db.prepare(
-    'INSERT INTO products (name, category, price, description, image_filename, stock, is_active) VALUES (?, ?, ?, ?, ?, 1, 1)'
-  );
-  for (const p of products) {
-    insert.run(p.name, p.category, p.price, p.description, p.image || '');
+    CREATE TABLE IF NOT EXISTS products (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      price INTEGER NOT NULL,
+      description TEXT DEFAULT '',
+      image_filename TEXT DEFAULT '',
+      stock INTEGER DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS orders (
+      id SERIAL PRIMARY KEY,
+      order_code TEXT UNIQUE NOT NULL,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT NOT NULL,
+      customer_address TEXT DEFAULT '',
+      delivery_type TEXT NOT NULL,
+      total_price INTEGER NOT NULL,
+      status TEXT DEFAULT 'menunggu',
+      payment_method TEXT DEFAULT 'cod',
+      payment_status TEXT DEFAULT 'belum_bayar',
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS order_items (
+      id SERIAL PRIMARY KEY,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+      product_name TEXT NOT NULL,
+      product_price INTEGER NOT NULL,
+      quantity INTEGER NOT NULL,
+      subtotal INTEGER NOT NULL
+    );
+  ` : `
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT DEFAULT 'admin',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      price INTEGER NOT NULL,
+      description TEXT DEFAULT '',
+      image_filename TEXT DEFAULT '',
+      stock INTEGER DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_code TEXT UNIQUE NOT NULL,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT NOT NULL,
+      customer_address TEXT DEFAULT '',
+      delivery_type TEXT NOT NULL,
+      total_price INTEGER NOT NULL,
+      status TEXT DEFAULT 'menunggu',
+      payment_method TEXT DEFAULT 'cod',
+      payment_status TEXT DEFAULT 'belum_bayar',
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      product_id INTEGER,
+      product_name TEXT NOT NULL,
+      product_price INTEGER NOT NULL,
+      quantity INTEGER NOT NULL,
+      subtotal INTEGER NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+    );
+  `;
+
+  if (isProd) {
+    await db.query(createTablesSQL);
+  } else {
+    db.exec(createTablesSQL);
   }
-  console.log(`✅ ${products.length} produk sample berhasil ditambahkan`);
+
+  // Seed Admin
+  const adminCheckSQL = isProd ? "SELECT id FROM users WHERE username = $1" : "SELECT id FROM users WHERE username = ?";
+  const adminRes = isProd ? await db.query(adminCheckSQL, ['admin']) : db.prepare(adminCheckSQL).get('admin');
+  const existingAdmin = isProd ? adminRes.rows[0] : adminRes;
+
+  if (!existingAdmin) {
+    const hashed = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'dapurbibi123', 10);
+    const insertSQL = isProd ? "INSERT INTO users (username, password, role) VALUES ($1, $2, $3)" : "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
+    if (isProd) await db.query(insertSQL, ['admin', hashed, 'admin']);
+    else db.prepare(insertSQL).run('admin', hashed, 'admin');
+    console.log('✅ Admin seeded');
+  }
+
+  // Seed Products
+  const countRes = isProd ? await db.query("SELECT COUNT(*) as c FROM products") : db.prepare("SELECT COUNT(*) as c FROM products").get();
+  const count = isProd ? parseInt(countRes.rows[0].c) : countRes.c;
+
+  if (count === 0) {
+    const products = [
+      { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng dengan telur mata sapi, ayam suwir, dan kerupuk.', image: 'product-nasi-goreng.png' },
+      { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng dengan cita rasa khas Jawa.', image: 'product-mie-goreng.png' },
+      { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam pilihan dibakar dengan marinasi madu.', image: 'product-ayam-bakar.png' },
+      { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto ayam kuning segar dengan bihun.', image: 'product-soto-ayam.png' },
+      { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk peras segar dengan es.', image: 'product-es-jeruk.png' },
+      { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Jus alpukat creamy dengan susu.', image: 'product-jus-alpukat.png' }
+    ];
+
+    const insertProductSQL = isProd ? 
+      "INSERT INTO products (name, category, price, description, image_filename) VALUES ($1, $2, $3, $4, $5)" :
+      "INSERT INTO products (name, category, price, description, image_filename) VALUES (?, ?, ?, ?, ?)";
+    
+    for (const p of products) {
+      if (isProd) await db.query(insertProductSQL, [p.name, p.category, p.price, p.description, p.image]);
+      else db.prepare(insertProductSQL).run(p.name, p.category, p.price, p.description, p.image);
+    }
+    console.log(`✅ ${products.length} produk sample ditambahkan`);
+  }
 }
+
+// Global query helper to handle SQLite vs PG parameter markers (? vs $1)
+db.safeQuery = async (sql, params = []) => {
+  if (isProd) {
+    // Replace ? with $1, $2, etc.
+    let count = 0;
+    const pgSql = sql.replace(/\?/g, () => {
+      count++;
+      return `$${count}`;
+    });
+    const res = await db.query(pgSql, params);
+    return res.rows;
+  } else {
+    return db.prepare(sql).all(...params);
+  }
+};
+
+db.safeGet = async (sql, params = []) => {
+  if (isProd) {
+    let count = 0;
+    const pgSql = sql.replace(/\?/g, () => {
+      count++;
+      return `$${count}`;
+    });
+    const res = await db.query(pgSql, params);
+    return res.rows[0];
+  } else {
+    return db.prepare(sql).get(...params);
+  }
+};
+
+db.safeRun = async (sql, params = []) => {
+  if (isProd) {
+    let count = 0;
+    const pgSql = sql.replace(/\?/g, () => {
+      count++;
+      return `$${count}`;
+    });
+    return await db.query(pgSql, params);
+  } else {
+    return db.prepare(sql).run(...params);
+  }
+};
+
+db.beginTransaction = async () => {
+  if (isProd) {
+    const client = await db.connect();
+    client.release(); // Just check connection
+    await db.query('BEGIN');
+  } else {
+    db.exec('BEGIN TRANSACTION');
+  }
+};
+
+db.commit = async () => {
+  if (isProd) await db.query('COMMIT');
+  else db.exec('COMMIT');
+};
+
+db.rollback = async () => {
+  if (isProd) await db.query('ROLLBACK');
+  else db.exec('ROLLBACK');
+};
+
+// Start initialization
+initDB().catch(console.error);
 
 module.exports = db;

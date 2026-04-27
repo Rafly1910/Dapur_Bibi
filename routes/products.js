@@ -27,74 +27,99 @@ const upload = multer({
 });
 
 // GET /api/products — Public
-router.get('/', (req, res) => {
-  const products = db.prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY category, name').all();
-  res.json(products);
+router.get('/', async (req, res) => {
+  try {
+    const products = await db.safeQuery('SELECT * FROM products WHERE is_active = 1 ORDER BY category, name');
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/products/all — Admin
-router.get('/all', verifyToken, (req, res) => {
-  const products = db.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
-  res.json(products);
+router.get('/all', verifyToken, async (req, res) => {
+  try {
+    const products = await db.safeQuery('SELECT * FROM products ORDER BY created_at DESC');
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/products — Admin
-router.post('/', verifyToken, upload.single('image'), (req, res) => {
-  const { name, category, price, description, stock } = req.body;
-  if (!name || !category || !price) {
-    return res.status(400).json({ error: 'Nama, kategori, dan harga wajib diisi' });
+router.post('/', verifyToken, upload.single('image'), async (req, res) => {
+  try {
+    const { name, category, price, description, stock } = req.body;
+    if (!name || !category || !price) {
+      return res.status(400).json({ error: 'Nama, kategori, dan harga wajib diisi' });
+    }
+    const image_filename = req.file ? req.file.filename : '';
+    const result = await db.safeRun(
+      'INSERT INTO products (name, category, price, description, image_filename, stock, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
+      [name, category, parseInt(price), description || '', image_filename, parseInt(stock) ?? 1]
+    );
+    
+    // In PG we can't easily get lastInsertRowid like SQLite, but we can query by name/created_at or use RETURNING
+    // Since our database.js is generic, let's just query the newest one if possible or use a more specific query
+    const product = await db.safeGet('SELECT * FROM products ORDER BY id DESC LIMIT 1');
+    res.status(201).json(product);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  const image_filename = req.file ? req.file.filename : '';
-  const result = db.prepare(
-    'INSERT INTO products (name, category, price, description, image_filename, stock, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)'
-  ).run(name, category, parseInt(price), description || '', image_filename, parseInt(stock) ?? 1);
-  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
-  res.status(201).json(product);
 });
 
 // PUT /api/products/:id — Admin
-router.put('/:id', verifyToken, upload.single('image'), (req, res) => {
-  const { id } = req.params;
-  const { name, category, price, description, stock, is_active } = req.body;
-  const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-  if (!existing) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+router.put('/:id', verifyToken, upload.single('image'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, price, description, stock, is_active } = req.body;
+    const existing = await db.safeGet('SELECT * FROM products WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
-  let image_filename = existing.image_filename;
-  if (req.file) {
-    if (image_filename) {
-      const old = path.join(uploadDir, image_filename);
-      if (fs.existsSync(old)) fs.unlinkSync(old);
+    let image_filename = existing.image_filename;
+    if (req.file) {
+      if (image_filename) {
+        const old = path.join(uploadDir, image_filename);
+        if (fs.existsSync(old)) fs.unlinkSync(old);
+      }
+      image_filename = req.file.filename;
     }
-    image_filename = req.file.filename;
-  }
 
-  db.prepare(
-    'UPDATE products SET name=?, category=?, price=?, description=?, image_filename=?, stock=?, is_active=? WHERE id=?'
-  ).run(
-    name || existing.name,
-    category || existing.category,
-    price ? parseInt(price) : existing.price,
-    description !== undefined ? description : existing.description,
-    image_filename,
-    stock !== undefined ? parseInt(stock) : existing.stock,
-    is_active !== undefined ? parseInt(is_active) : existing.is_active,
-    id
-  );
-  const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-  res.json(updated);
+    await db.safeRun(
+      'UPDATE products SET name=?, category=?, price=?, description=?, image_filename=?, stock=?, is_active=? WHERE id=?',
+      [
+        name || existing.name,
+        category || existing.category,
+        price ? parseInt(price) : existing.price,
+        description !== undefined ? description : existing.description,
+        image_filename,
+        stock !== undefined ? parseInt(stock) : existing.stock,
+        is_active !== undefined ? parseInt(is_active) : existing.is_active,
+        id
+      ]
+    );
+    const updated = await db.safeGet('SELECT * FROM products WHERE id = ?', [id]);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE /api/products/:id — Admin
-router.delete('/:id', verifyToken, (req, res) => {
-  const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-  if (!existing) return res.status(404).json({ error: 'Produk tidak ditemukan' });
-  if (existing.image_filename) {
-    const p = path.join(uploadDir, existing.image_filename);
-    if (fs.existsSync(p)) fs.unlinkSync(p);
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await db.safeGet('SELECT * FROM products WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+    if (existing.image_filename) {
+      const p = path.join(uploadDir, existing.image_filename);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+    await db.safeRun('DELETE FROM products WHERE id = ?', [id]);
+    res.json({ message: 'Produk berhasil dihapus' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  db.prepare('DELETE FROM products WHERE id = ?').run(id);
-  res.json({ message: 'Produk berhasil dihapus' });
 });
 
 module.exports = router;

@@ -5,25 +5,29 @@ const jwt = require('jsonwebtoken');
 const db = require('../database');
 
 // POST /api/auth/login
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username dan password harus diisi' });
+router.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username dan password harus diisi' });
+    }
+    const user = await db.safeGet('SELECT * FROM users WHERE username = ?', [username]);
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({ error: 'Username atau password salah' });
+    }
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    res.json({ token, username: user.username, role: user.role });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (!user || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ error: 'Username atau password salah' });
-  }
-  const token = jwt.sign(
-    { id: user.id, username: user.username, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: '24h' }
-  );
-  res.json({ token, username: user.username, role: user.role });
 });
 
 // POST /api/auth/verify
-router.post('/verify', (req, res) => {
+router.post('/verify', async (req, res) => {
   const auth = req.headers['authorization'];
   if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ valid: false });
   const token = auth.split(' ')[1];
