@@ -24,9 +24,6 @@ function initLoginPage() {
         <div style="text-align:center;margin-top:20px">
           <button class="btn btn-ghost btn-sm" onclick="navigate('home')">← Kembali ke Beranda</button>
         </div>
-        <div style="margin-top:24px;padding:16px;background:var(--color-surface-2);border-radius:var(--radius-md);font-size:0.8rem;color:var(--color-text-3);text-align:center">
-          Default: <strong>admin</strong> / <strong>dapurbibi123</strong>
-        </div>
       </div>
     </div>`;
 
