@@ -34,7 +34,12 @@ app.get('*', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🍽️  DapurBibi Server berjalan di http://localhost:${PORT}`);
-  console.log(`📊  Admin login: admin / dapurbibi123`);
-});
+// Export for Vercel
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🍽️  DapurBibi Server berjalan di http://localhost:${PORT}`);
+    console.log(`📊  Admin login: admin / dapurbibi123`);
+  });
+}
