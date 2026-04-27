@@ -1,4 +1,4 @@
-// Gunakan node:sqlite — built-in Node.js v22+, tidak perlu install apa-apa!
+// Gunakan node:sqlite — built-in Node.js v22+
 const { DatabaseSync } = require('node:sqlite');
 const bcrypt = require('bcryptjs');
 const path = require('path');
@@ -75,10 +75,10 @@ if (!existingAdmin) {
 const productCount = db.prepare('SELECT COUNT(*) as c FROM products').get();
 if (productCount.c === 0) {
   const products = [
-    { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng dengan telur mata sapi, ayam suwir, dan kerupuk. Bumbu rempah pilihan yang lezat dan menggugah selera.' },
-    { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng dengan cita rasa khas Jawa, dilengkapi sayuran segar, telur, dan taburan bawang goreng.' },
-    { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam pilihan dibakar dengan marinasi madu dan rempah pilihan, disajikan dengan nasi putih hangat.' },
-    { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto ayam kuning segar dengan bihun, telur rebus, dan kerupuk. Kuah gurih khas nusantara.' },
+    { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng dengan telur mata sapi, ayam suwir, dan kerupuk. Bumbu rempah pilihan yang lezat dan menggugah selera.', image: 'product-nasi-goreng.png' },
+    { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng dengan cita rasa khas Jawa, dilengkapi sayuran segar, telur, dan taburan bawang goreng.', image: 'product-mie-goreng.png' },
+    { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam pilihan dibakar dengan marinasi madu dan rempah pilihan, disajikan dengan nasi putih hangat.', image: 'product-ayam-bakar.png' },
+    { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto ayam kuning segar dengan bihun, telur rebus, dan kerupuk. Kuah gurih khas nusantara.', image: 'product-soto-ayam.png' },
     { name: 'Nasi Uduk Komplit', category: 'Makan Berat', price: 18000, description: 'Nasi uduk gurih dengan lauk ayam goreng, tempe orek, tahu, dan sambal kacang.' },
     { name: 'Tempe Orek Pedas', category: 'Lauk Pauk', price: 8000, description: 'Tempe goreng orek dengan cabai merah dan bawang, renyah manis pedas.' },
     { name: 'Sayur Bening Bayam', category: 'Lauk Pauk', price: 7000, description: 'Sayur bening bayam jagung segar yang menyehatkan, bumbu sederhana yang segar.' },
@@ -88,8 +88,8 @@ if (productCount.c === 0) {
     { name: 'Pisang Goreng Crispy', category: 'Camilan', price: 12000, description: 'Pisang goreng dengan balutan tepung crispy gurih, disajikan 3 buah per porsi.' },
     { name: 'Bakwan Jagung', category: 'Camilan', price: 5000, description: 'Bakwan jagung manis gurih, digoreng hingga kecoklatan sempurna.' },
     { name: 'Es Teh Manis', category: 'Minuman', price: 5000, description: 'Teh manis dingin yang menyegarkan.' },
-    { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk peras segar dengan es, tanpa bahan pengawet. Segar dan kaya vitamin C.' },
-    { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Jus alpukat creamy dengan susu kental manis dan gula aren.' },
+    { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk peras segar dengan es, tanpa bahan pengawet. Segar dan kaya vitamin C.', image: 'product-es-jeruk.png' },
+    { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Jus alpukat creamy dengan susu kental manis dan gula aren.', image: 'product-jus-alpukat.png' },
     { name: 'Es Cincau Hitam', category: 'Minuman', price: 7000, description: 'Minuman tradisional cincau hitam dengan santan dan gula merah.' },
   ];
 
@@ -97,7 +97,7 @@ if (productCount.c === 0) {
     'INSERT INTO products (name, category, price, description, image_filename, stock, is_active) VALUES (?, ?, ?, ?, ?, 1, 1)'
   );
   for (const p of products) {
-    insert.run(p.name, p.category, p.price, p.description, '');
+    insert.run(p.name, p.category, p.price, p.description, p.image || '');
   }
   console.log(`✅ ${products.length} produk sample berhasil ditambahkan`);
 }

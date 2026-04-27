@@ -5,33 +5,44 @@ const { verifyToken } = require('../middleware/auth');
 
 // GET /api/reports/summary
 router.get('/summary', verifyToken, (req, res) => {
-  const { date_from, date_to } = req.query;
-  let dateWhere = '';
-  if (date_from && date_to) dateWhere = `AND date(o.created_at) BETWEEN '${date_from}' AND '${date_to}'`;
-  else if (date_from) dateWhere = `AND date(o.created_at) >= '${date_from}'`;
-  else if (date_to) dateWhere = `AND date(o.created_at) <= '${date_to}'`;
+  try {
+    const { date_from, date_to } = req.query;
+    let dateWhereSimple = '';
+    let dateWhereAliased = '';
+    if (date_from && date_to) {
+      dateWhereSimple = `AND date(created_at) BETWEEN '${date_from}' AND '${date_to}'`;
+      dateWhereAliased = `AND date(o.created_at) BETWEEN '${date_from}' AND '${date_to}'`;
+    } else if (date_from) {
+      dateWhereSimple = `AND date(created_at) >= '${date_from}'`;
+      dateWhereAliased = `AND date(o.created_at) >= '${date_from}'`;
+    } else if (date_to) {
+      dateWhereSimple = `AND date(created_at) <= '${date_to}'`;
+      dateWhereAliased = `AND date(o.created_at) <= '${date_to}'`;
+    }
 
-  const baseWhere = `status != 'dibatalkan' ${dateWhere}`;
+    const totalOrders = db.prepare(`SELECT COUNT(*) as c FROM orders WHERE status != 'dibatalkan' ${dateWhereSimple}`).get();
+    const totalRevenue = db.prepare(`SELECT COALESCE(SUM(total_price),0) as t FROM orders WHERE status != 'dibatalkan' ${dateWhereSimple}`).get();
+    const totalItems = db.prepare(`
+      SELECT COALESCE(SUM(oi.quantity),0) as c FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id WHERE o.status != 'dibatalkan' ${dateWhereAliased}
+    `).get();
+    const pending = db.prepare(`SELECT COUNT(*) as c FROM orders WHERE status='menunggu'`).get();
+    const today = db.prepare(`SELECT COUNT(*) as c FROM orders WHERE date(created_at)=date('now','localtime') AND status!='dibatalkan'`).get();
+    const todayRev = db.prepare(`SELECT COALESCE(SUM(total_price),0) as t FROM orders WHERE date(created_at)=date('now','localtime') AND status!='dibatalkan'`).get();
 
-  const totalOrders = db.prepare(`SELECT COUNT(*) as c FROM orders WHERE ${baseWhere}`).get();
-  const totalRevenue = db.prepare(`SELECT COALESCE(SUM(total_price),0) as t FROM orders WHERE ${baseWhere}`).get();
-  const totalItems = db.prepare(`
-    SELECT COALESCE(SUM(oi.quantity),0) as c FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id WHERE o.${baseWhere}
-  `).get();
-  const pending = db.prepare(`SELECT COUNT(*) as c FROM orders WHERE status='menunggu'`).get();
-  const today = db.prepare(`SELECT COUNT(*) as c FROM orders WHERE date(created_at)=date('now','localtime') AND status!='dibatalkan'`).get();
-  const todayRev = db.prepare(`SELECT COALESCE(SUM(total_price),0) as t FROM orders WHERE date(created_at)=date('now','localtime') AND status!='dibatalkan'`).get();
-
-  res.json({
-    total_orders: totalOrders.c,
-    total_revenue: totalRevenue.t,
-    total_items_sold: totalItems.c,
-    pending_orders: pending.c,
-    avg_order_value: totalOrders.c > 0 ? Math.round(totalRevenue.t / totalOrders.c) : 0,
-    today_orders: today.c,
-    today_revenue: todayRev.t,
-  });
+    res.json({
+      total_orders: totalOrders.c,
+      total_revenue: totalRevenue.t,
+      total_items_sold: totalItems.c,
+      pending_orders: pending.c,
+      avg_order_value: totalOrders.c > 0 ? Math.round(totalRevenue.t / totalOrders.c) : 0,
+      today_orders: today.c,
+      today_revenue: todayRev.t,
+    });
+  } catch (err) {
+    console.error('Reports summary error:', err);
+    res.status(500).json({ error: 'Gagal memuat ringkasan laporan' });
+  }
 });
 
 // GET /api/reports/daily

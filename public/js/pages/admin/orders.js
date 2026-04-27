@@ -68,7 +68,7 @@ function renderOrdersTable(list) {
   const c = document.getElementById('orders-table');
   if (!list.length) { c.innerHTML = '<div class="no-results"><div class="icon">📦</div><p>Tidak ada pesanan</p></div>'; return; }
   c.innerHTML = `<table>
-    <thead><tr><th>Kode</th><th>Pelanggan</th><th>No. HP</th><th>Total</th><th>Tipe</th><th>Status</th><th>Waktu</th><th>Aksi</th></tr></thead>
+    <thead><tr><th>Kode</th><th>Pelanggan</th><th>No. HP</th><th>Total</th><th>Tipe</th><th>Bayar</th><th>Status</th><th>Waktu</th><th>Aksi</th></tr></thead>
     <tbody>${list.map(o => `
       <tr>
         <td><strong style="font-family:var(--font-heading)">${o.order_code}</strong></td>
@@ -76,6 +76,7 @@ function renderOrdersTable(list) {
         <td style="font-size:0.85rem">${o.customer_phone}</td>
         <td style="font-weight:700;color:var(--color-primary)">${formatRupiah(o.total_price)}</td>
         <td><span class="badge ${o.delivery_type==='delivery'?'badge-diproses':'badge-primary'}">${o.delivery_type==='delivery'?'🛵 Antar':'🏪 Ambil'}</span></td>
+        <td><span class="badge ${o.payment_status==='sudah_bayar'?'badge-selesai':'badge-menunggu'}" style="font-size:0.7rem">${getPaymentIcon(o.payment_method)} ${o.payment_status==='sudah_bayar'?'Lunas':'Pending'}</span></td>
         <td>
           <select class="status-select" style="border-color:${getStatusColor(o.status)};color:${getStatusColor(o.status)}" onchange="updateStatus(${o.id},this.value)">
             <option value="menunggu" ${o.status==='menunggu'?'selected':''}>⏳ Menunggu</option>
@@ -107,6 +108,8 @@ async function viewOrderDetail(id) {
         <div><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">No. HP</div><div style="font-weight:600">${o.customer_phone}</div></div>
         <div><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Pengiriman</div><div>${o.delivery_type==='delivery'?'🛵 Antar ke Alamat':'🏪 Ambil Sendiri'}</div></div>
         <div><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Status</div><span class="badge badge-${o.status}">${o.status.charAt(0).toUpperCase()+o.status.slice(1)}</span></div>
+        <div><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Metode Bayar</div><div>${getPaymentIcon(o.payment_method)} ${getPaymentLabel(o.payment_method)}</div></div>
+        <div><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Status Bayar</div><span class="badge ${o.payment_status==='sudah_bayar'?'badge-selesai':'badge-menunggu'}">${o.payment_status==='sudah_bayar'?'✅ Sudah Bayar':'⏳ Belum Bayar'}</span></div>
         ${o.customer_address?`<div style="grid-column:span 2"><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Alamat</div><div>${o.customer_address}</div></div>`:''}
         ${o.notes?`<div style="grid-column:span 2"><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Catatan</div><div style="font-style:italic">${o.notes}</div></div>`:''}
         <div><div style="font-size:0.78rem;color:var(--color-text-3);margin-bottom:4px">Waktu Pesan</div><div style="font-size:0.85rem">${formatDate(o.created_at)}</div></div>
@@ -122,6 +125,13 @@ async function viewOrderDetail(id) {
         <span style="font-weight:700;font-family:var(--font-heading)">TOTAL PEMBAYARAN</span>
         <span style="font-size:1.3rem;font-weight:800;font-family:var(--font-heading);color:var(--color-primary)">${formatRupiah(o.total_price)}</span>
       </div>`,
-      `<button class="btn btn-primary" onclick="closeModal()">Tutup</button>`);
+      `${o.payment_status !== 'sudah_bayar' ? `<button class="btn btn-success" id="confirm-pay-btn">💰 Konfirmasi Bayar</button>` : ''}
+       <button class="btn btn-primary" onclick="closeModal()">Tutup</button>`);
+    if (o.payment_status !== 'sudah_bayar') {
+      document.getElementById('confirm-pay-btn')?.addEventListener('click', async () => {
+        try { await Orders.confirmPayment(o.id); showToast('Pembayaran dikonfirmasi ✓', 'success'); closeModal(); await loadOrders(); }
+        catch(e) { showToast('Gagal: ' + e.message, 'error'); }
+      });
+    }
   } catch (e) { showToast('Gagal memuat detail: ' + e.message, 'error'); }
 }
