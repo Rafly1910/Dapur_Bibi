@@ -1,17 +1,20 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
-const path = require('path');
 require('dotenv').config();
 
 let db = {};
 const isProd = process.env.DATABASE_URL ? true : false;
 
 if (isProd) {
+  console.log('🌐 Menghubungkan ke PostgreSQL (Supabase)...');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000, // 10 detik timeout
   });
   
+  pool.on('error', (err) => console.error('❌ Unexpected PG Pool Error:', err));
+
   db.safeQuery = async (sql, params = []) => {
     let count = 0;
     const pgSql = sql.replace(/\?/g, () => `$${++count}`);
@@ -29,13 +32,15 @@ if (isProd) {
     const pgSql = sql.replace(/\?/g, () => `$${++count}`);
     return await pool.query(pgSql, params);
   };
+  db.rawExec = (sql) => pool.query(sql);
   db.beginTransaction = () => pool.query('BEGIN');
   db.commit = () => pool.query('COMMIT');
   db.rollback = () => pool.query('ROLLBACK');
-  db.rawExec = (sql) => pool.query(sql);
 
 } else {
+  console.log('🏠 Menggunakan SQLite Lokal...');
   const { DatabaseSync } = require('node:sqlite');
+  const path = require('path');
   const sqlite = new DatabaseSync(path.join(__dirname, 'data.db'));
   
   db.safeQuery = async (sql, params = []) => sqlite.prepare(sql).all(...params);
@@ -48,6 +53,11 @@ if (isProd) {
 }
 
 async function initDB() {
+  if (isProd && !process.env.DATABASE_URL) {
+    console.error('❌ ERROR: DATABASE_URL tidak ditemukan di Environment Variables Vercel!');
+    return;
+  }
+
   const createTablesSQL = `
     CREATE TABLE IF NOT EXISTS users (
       id ${isProd ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${isProd ? '' : 'AUTOINCREMENT'},
@@ -56,7 +66,6 @@ async function initDB() {
       role TEXT DEFAULT 'admin',
       created_at ${isProd ? 'TIMESTAMP' : 'DATETIME'} DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS products (
       id ${isProd ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${isProd ? '' : 'AUTOINCREMENT'},
       name TEXT NOT NULL,
@@ -68,7 +77,6 @@ async function initDB() {
       is_active INTEGER DEFAULT 1,
       created_at ${isProd ? 'TIMESTAMP' : 'DATETIME'} DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS orders (
       id ${isProd ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${isProd ? '' : 'AUTOINCREMENT'},
       order_code TEXT UNIQUE NOT NULL,
@@ -83,7 +91,6 @@ async function initDB() {
       notes TEXT DEFAULT '',
       created_at ${isProd ? 'TIMESTAMP' : 'DATETIME'} DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS order_items (
       id ${isProd ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${isProd ? '' : 'AUTOINCREMENT'},
       order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -96,26 +103,23 @@ async function initDB() {
   `;
 
   try {
+    console.log('🛠️ Inisialisasi tabel...');
     await db.rawExec(createTablesSQL);
+    console.log('✅ Tabel siap');
 
-    // Seed Admin
     const admin = await db.safeGet("SELECT id FROM users WHERE username = ?", ['admin']);
     if (!admin) {
       const hashed = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'dapurbibi123', 10);
       await db.safeRun("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', hashed, 'admin']);
-      console.log('✅ Admin seeded');
+      console.log('👤 Admin seeded');
     }
 
-    // Force seed products if empty
     const countRes = await db.safeGet("SELECT COUNT(*) as c FROM products");
     if (parseInt(countRes.c) === 0) {
+      console.log('🌱 Seeding produk contoh...');
       const products = [
-        { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng lezat.', image: 'product-nasi-goreng.png' },
-        { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng khas.', image: 'product-mie-goreng.png' },
-        { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam bakar manis.', image: 'product-ayam-bakar.png' },
-        { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto segar.', image: 'product-soto-ayam.png' },
-        { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk segar.', image: 'product-es-jeruk.png' },
-        { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Alpukat creamy.', image: 'product-jus-alpukat.png' }
+        { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Lezat', image: 'product-nasi-goreng.png' },
+        { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Segar', image: 'product-es-jeruk.png' }
       ];
       for (const p of products) {
         await db.safeRun("INSERT INTO products (name, category, price, description, image_filename, is_active) VALUES (?, ?, ?, ?, ?, 1)", [p.name, p.category, p.price, p.description, p.image]);
@@ -123,10 +127,11 @@ async function initDB() {
       console.log('✅ Menu seeded');
     }
   } catch (err) {
-    console.error('❌ DB Init Error:', err);
+    console.error('❌ DATABASE CRITICAL ERROR:', err.message);
+    console.error('Detail:', err);
   }
 }
 
-initDB().catch(console.error);
+initDB();
 
 module.exports = db;
