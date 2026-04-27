@@ -32,7 +32,7 @@ if (isProd) {
   db.beginTransaction = () => pool.query('BEGIN');
   db.commit = () => pool.query('COMMIT');
   db.rollback = () => pool.query('ROLLBACK');
-  db.rawExec = (sql) => pool.query(sql); // For multiple statements
+  db.rawExec = (sql) => pool.query(sql);
 
 } else {
   const { DatabaseSync } = require('node:sqlite');
@@ -48,8 +48,6 @@ if (isProd) {
 }
 
 async function initDB() {
-  if (!process.env.DATABASE_URL && isProd) return;
-
   const createTablesSQL = `
     CREATE TABLE IF NOT EXISTS users (
       id ${isProd ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${isProd ? '' : 'AUTOINCREMENT'},
@@ -105,22 +103,24 @@ async function initDB() {
     if (!admin) {
       const hashed = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'dapurbibi123', 10);
       await db.safeRun("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', hashed, 'admin']);
+      console.log('✅ Admin seeded');
     }
 
-    // Seed Products if empty
+    // Force seed products if empty
     const countRes = await db.safeGet("SELECT COUNT(*) as c FROM products");
     if (parseInt(countRes.c) === 0) {
       const products = [
-        { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng dengan telur mata sapi, ayam suwir, dan kerupuk.', image: 'product-nasi-goreng.png' },
-        { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng dengan cita rasa khas Jawa.', image: 'product-mie-goreng.png' },
-        { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam pilihan dibakar dengan marinasi madu.', image: 'product-ayam-bakar.png' },
-        { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto ayam kuning segar dengan bihun.', image: 'product-soto-ayam.png' },
-        { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk peras segar dengan es.', image: 'product-es-jeruk.png' },
-        { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Jus alpukat creamy dengan susu.', image: 'product-jus-alpukat.png' }
+        { name: 'Nasi Goreng Spesial', category: 'Makan Berat', price: 25000, description: 'Nasi goreng lezat.', image: 'product-nasi-goreng.png' },
+        { name: 'Mie Goreng Jawa', category: 'Makan Berat', price: 22000, description: 'Mie goreng khas.', image: 'product-mie-goreng.png' },
+        { name: 'Ayam Bakar Madu', category: 'Makan Berat', price: 30000, description: 'Ayam bakar manis.', image: 'product-ayam-bakar.png' },
+        { name: 'Soto Ayam Kuning', category: 'Makan Berat', price: 20000, description: 'Soto segar.', image: 'product-soto-ayam.png' },
+        { name: 'Es Jeruk Peras', category: 'Minuman', price: 8000, description: 'Jeruk segar.', image: 'product-es-jeruk.png' },
+        { name: 'Jus Alpukat', category: 'Minuman', price: 15000, description: 'Alpukat creamy.', image: 'product-jus-alpukat.png' }
       ];
       for (const p of products) {
-        await db.safeRun("INSERT INTO products (name, category, price, description, image_filename) VALUES (?, ?, ?, ?, ?)", [p.name, p.category, p.price, p.description, p.image]);
+        await db.safeRun("INSERT INTO products (name, category, price, description, image_filename, is_active) VALUES (?, ?, ?, ?, ?, 1)", [p.name, p.category, p.price, p.description, p.image]);
       }
+      console.log('✅ Menu seeded');
     }
   } catch (err) {
     console.error('❌ DB Init Error:', err);
