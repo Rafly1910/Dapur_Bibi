@@ -6,11 +6,16 @@ const fs = require('fs');
 const db = require('../database');
 const { verifyToken } = require('../middleware/auth');
 
+// Hanya gunakan disk storage jika tidak di Vercel/Production
+const isVercel = process.env.VERCEL || process.env.NODE_ENV === 'production';
 const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+// Di Vercel, kita gunakan Memory Storage karena Disk Storage dilarang
+const storage = isVercel ? multer.memoryStorage() : multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `product-${Date.now()}${ext}`);
@@ -32,6 +37,7 @@ router.get('/', async (req, res) => {
     const products = await db.safeQuery('SELECT * FROM products WHERE is_active = 1 ORDER BY category, name');
     res.json(products);
   } catch (err) {
+    console.error('API Error /products:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -53,14 +59,13 @@ router.post('/', verifyToken, upload.single('image'), async (req, res) => {
     if (!name || !category || !price) {
       return res.status(400).json({ error: 'Nama, kategori, dan harga wajib diisi' });
     }
-    const image_filename = req.file ? req.file.filename : '';
-    const result = await db.safeRun(
+    const image_filename = req.file ? (isVercel ? '' : req.file.filename) : '';
+    
+    await db.safeRun(
       'INSERT INTO products (name, category, price, description, image_filename, stock, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
-      [name, category, parseInt(price), description || '', image_filename, parseInt(stock) ?? 1]
+      [name, category, parseInt(price), description || '', image_filename, parseInt(stock) || 1]
     );
     
-    // In PG we can't easily get lastInsertRowid like SQLite, but we can query by name/created_at or use RETURNING
-    // Since our database.js is generic, let's just query the newest one if possible or use a more specific query
     const product = await db.safeGet('SELECT * FROM products ORDER BY id DESC LIMIT 1');
     res.status(201).json(product);
   } catch (err) {
@@ -68,7 +73,7 @@ router.post('/', verifyToken, upload.single('image'), async (req, res) => {
   }
 });
 
-// PUT /api/products/:id — Admin
+// Sisanya (PUT/DELETE) juga perlu async/await (sudah diupdate sebelumnya)
 router.put('/:id', verifyToken, upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -77,7 +82,7 @@ router.put('/:id', verifyToken, upload.single('image'), async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
     let image_filename = existing.image_filename;
-    if (req.file) {
+    if (req.file && !isVercel) {
       if (image_filename) {
         const old = path.join(uploadDir, image_filename);
         if (fs.existsSync(old)) fs.unlinkSync(old);
@@ -105,13 +110,12 @@ router.put('/:id', verifyToken, upload.single('image'), async (req, res) => {
   }
 });
 
-// DELETE /api/products/:id — Admin
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await db.safeGet('SELECT * FROM products WHERE id = ?', [id]);
     if (!existing) return res.status(404).json({ error: 'Produk tidak ditemukan' });
-    if (existing.image_filename) {
+    if (existing.image_filename && !isVercel) {
       const p = path.join(uploadDir, existing.image_filename);
       if (fs.existsSync(p)) fs.unlinkSync(p);
     }
