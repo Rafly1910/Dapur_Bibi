@@ -34,16 +34,26 @@ router.post('/', async (req, res) => {
   const validatedItems = [];
 
   try {
-    for (const item of items) {
-      const product = await db.safeGet('SELECT * FROM products WHERE id = ? AND is_active = 1', [item.product_id]);
-      if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
-      const qty = Math.max(1, parseInt(item.quantity));
-      const subtotal = product.price * qty;
-      total_price += subtotal;
-      validatedItems.push({ product, qty, subtotal });
-    }
+      for (const item of items) {
+        const product = await db.safeGet('SELECT * FROM products WHERE id = ? AND is_active = 1', [item.product_id]);
+        if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
+        const qty = Math.max(1, parseInt(item.quantity));
+        const subtotal = product.price * qty;
+        total_price += subtotal;
+        validatedItems.push({ product, qty, subtotal });
+      }
 
-    if (typeof db.beginTransaction === 'function') await db.beginTransaction();
+      // ==========================================
+      // TAMBAHAN: Hitung Ongkir di Server
+      // ==========================================
+      let ongkir = 0;
+      if (delivery_type === 'delivery') {
+        ongkir = 10000; // Tarif ongkir harus sama dengan di checkout.js
+        total_price += ongkir; // Tambahkan ke total keseluruhan
+      }
+      // ==========================================
+
+      if (typeof db.beginTransaction === 'function') await db.beginTransaction();
     
     const code = await generateOrderCode();
     await db.safeRun(

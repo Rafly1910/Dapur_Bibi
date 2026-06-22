@@ -75,7 +75,18 @@ function initCheckoutPage() {
             </div>
             <div class="order-summary-body">
               ${cart.map(i=>`<div class="summary-row"><span>${i.name} ×${i.quantity}</span><span>${formatRupiah(i.price*i.quantity)}</span></div>`).join('')}
-              <div class="summary-row total"><span>Total Pembayaran</span><span class="summary-total-price">${formatRupiah(total)}</span></div>
+              
+              <!-- TAMBAHAN BARIS ONGKIR -->
+              <div class="summary-row" id="ongkir-row" style="color: var(--color-primary); display: flex;">
+                <span>🛵 Ongkir (Antar)</span>
+                <span id="ongkir-price">${formatRupiah(10000)}</span>
+              </div>
+
+              <div class="summary-row total">
+                <span>Total Pembayaran</span>
+                <!-- Tambahkan ID final-total dan +10000 karena defaultnya Antar -->
+                <span class="summary-total-price" id="final-total">${formatRupiah(total + 10000)}</span>
+              </div>
               <button class="btn btn-primary btn-full" style="margin-top:20px" id="place-order-btn">✅ Buat Pesanan Sekarang</button>
             </div>
           </div>
@@ -86,7 +97,22 @@ function initCheckoutPage() {
   // Events
   document.querySelectorAll('input[name="delivery"]').forEach(r => {
     r.addEventListener('change', () => {
-      document.getElementById('addr-field').style.display = r.value === 'delivery' ? 'block' : 'none';
+      const isDelivery = r.value === 'delivery';
+      document.getElementById('addr-field').style.display = isDelivery ? 'block' : 'none';
+      
+      // Update Ongkir & Total Harga
+      const ongkirRow = document.getElementById('ongkir-row');
+      const finalTotalEl = document.getElementById('final-total');
+      const subtotal = Cart.total();
+      const ongkir = 10000; // Tarif flat ongkir Rp 10.000
+
+      if (isDelivery) {
+        if(ongkirRow) ongkirRow.style.display = 'flex';
+        if(finalTotalEl) finalTotalEl.textContent = formatRupiah(subtotal + ongkir);
+      } else {
+        if(ongkirRow) ongkirRow.style.display = 'none';
+        if(finalTotalEl) finalTotalEl.textContent = formatRupiah(subtotal);
+      }
     });
   });
 
