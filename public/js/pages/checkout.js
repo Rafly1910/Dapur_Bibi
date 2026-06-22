@@ -200,7 +200,15 @@ async function placeOrder() {
           <div class="success-icon">🎉</div>
           <h2>Pesanan Berhasil Dibuat!</h2>
           <p style="margin-bottom:8px">Terima kasih, <strong>${name}</strong>!</p>
-          <div class="success-code">${result.order_code}</div>
+          <!-- Wrapper Salin Kode -->
+          <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 20px;">
+            <div class="success-code" style="margin: 0;">${result.order_code}</div>
+            <button class="btn btn-outline btn-sm" 
+                    onclick="navigator.clipboard.writeText('${result.order_code}'); showToast('Kode pesanan disalin!', 'success');" 
+                    style="padding: 8px 12px; font-size: 0.85rem; border-radius: var(--radius-md);">
+              📋 Salin
+            </button>
+          </div>
 
           <!-- Payment Instructions -->
           <div class="payment-success-box" style="margin:20px 0">
