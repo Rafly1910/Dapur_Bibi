@@ -26,6 +26,7 @@ function renderNavbar(role) {
         <div class="navbar-nav">
           <button class="nav-link ${hash==='home'||hash===''?'active':''}" onclick="navigate('home')">Beranda</button>
           <button class="nav-link ${hash==='menu'?'active':''}" onclick="navigate('menu')">Menu</button>
+          <button class="nav-link ${hash==='track'?'active':''}" onclick="navigate('track')">Cek Pesanan</button>
           <button class="cart-btn" onclick="navigate('cart')">
             🛒 <span class="btn-label">Keranjang</span>
             ${count > 0 ? `<span class="cart-badge">${count}</span>` : ''}
@@ -37,6 +38,8 @@ function renderNavbar(role) {
         <button class="nav-link" onclick="navigate('home');closeMobileMenu()">🏠 Beranda</button>
         <button class="nav-link" onclick="navigate('menu');closeMobileMenu()">🍽️ Menu</button>
         <button class="nav-link" onclick="navigate('cart');closeMobileMenu()">🛒 Keranjang ${count>0?`(${count})`:''}</button>
+        
+        <button class="nav-link" onclick="navigate('track');closeMobileMenu()">🔍 Cek Pesanan</button>
       </div>`;
 
     const hb = document.getElementById('hamburger-btn');
