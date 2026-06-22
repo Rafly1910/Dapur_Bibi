@@ -145,7 +145,7 @@ async function downloadReportCSV() {
     }
 
     // Buat Header Tabel CSV
-    let csvContent = "Kode Pesanan,Waktu Pesanan,Nama Pelanggan,Tipe Pengiriman,Metode Pembayaran,Total Belanja\n";
+    let csvContent = "Kode Pesanan;Waktu Pesanan;Nama Pelanggan;Tipe Pengiriman;Metode Pembayaran;Total Belanja\n";
 
     // Isi Baris Data
     orders.forEach(o => {
@@ -158,7 +158,7 @@ async function downloadReportCSV() {
       const bayar = o.payment_method.toUpperCase();
       const total = o.total_price;
 
-      csvContent += `${kode},${tanggal},${pelanggan},${tipe},${bayar},${total}\n`;
+      csvContent += `${kode};${tanggal};${pelanggan};${tipe};${bayar};${total}\n`;
     });
 
     // Proses konversi string jadi file dan langsung Download
