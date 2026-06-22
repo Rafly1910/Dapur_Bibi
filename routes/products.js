@@ -30,7 +30,28 @@ const upload = multer({
     else cb(new Error('Hanya file gambar yang diizinkan'));
   },
 });
-
+router.get('/bestseller', async (req, res) => {
+  try {
+    const sql = `
+      SELECT p.*, COALESCE(SUM(oi.quantity), 0) as total_sold 
+      FROM products p 
+      LEFT JOIN order_items oi ON p.id = oi.product_id 
+      WHERE p.is_active = 1
+      GROUP BY p.id 
+      ORDER BY total_sold DESC 
+      LIMIT 1
+    `;
+    const bestSeller = await db.safeGet(sql);
+    
+    if (!bestSeller) {
+      return res.status(404).json({ error: 'Belum ada data penjualan' });
+    }
+    
+    res.json(bestSeller);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // GET /api/products — Public
 router.get('/', async (req, res) => {
   try {

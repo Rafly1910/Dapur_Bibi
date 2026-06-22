@@ -32,6 +32,7 @@ const Auth = {
 const Products = {
   getAll: () => apiFetch('/products'),
   getAllAdmin: () => apiFetch('/products/all'),
+  getBestSeller: () => apiFetch('/products/bestseller'), // <--- TAMBAHKAN BARIS INI
   create: (fd) => apiFetch('/products', { method: 'POST', body: fd }),
   update: (id, fd) => apiFetch(`/products/${id}`, { method: 'PUT', body: fd }),
   delete: (id) => apiFetch(`/products/${id}`, { method: 'DELETE' }),
