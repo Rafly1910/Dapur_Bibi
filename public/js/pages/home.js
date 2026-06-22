@@ -17,26 +17,9 @@ function initHomePage() {
               <button class="btn btn-outline btn-lg" onclick="document.getElementById('cara-pesan').scrollIntoView({behavior:'smooth'})">Cara Pesan</button>
             </div>
           </div>
-          <div class="hero-visual">
-            <div class="hero-food-grid">
-              <div class="food-card-preview">
-                <div class="food-emoji-bg" style="background:linear-gradient(135deg,#FF6B3520,#FF6B3540)">🍚</div>
-                <div class="food-card-info"><div class="food-card-name">Nasi Goreng Spesial</div><div class="food-card-price">Rp 25.000</div></div>
-              </div>
-              <div class="food-card-preview">
-                <div class="food-emoji-bg" style="background:linear-gradient(135deg,#22C55E20,#22C55E40)">🍗</div>
-                <div class="food-card-info"><div class="food-card-name">Ayam Bakar Madu</div><div class="food-card-price">Rp 30.000</div></div>
-              </div>
-              <div class="food-card-preview">
-                <div class="food-emoji-bg" style="background:linear-gradient(135deg,#F59E0B20,#F59E0B40)">🍪</div>
-                <div class="food-card-info"><div class="food-card-name">Pisang Goreng Crispy</div><div class="food-card-price">Rp 12.000</div></div>
-              </div>
-              <div class="food-card-preview">
-                <div class="food-emoji-bg" style="background:linear-gradient(135deg,#3B82F620,#3B82F640)">🥤</div>
-                <div class="food-card-info"><div class="food-card-name">Jus Alpukat</div><div class="food-card-price">Rp 15.000</div></div>
-              </div>
+            <div class="hero-image-wrapper">
+            <img src="/img/Dapur Bibi.png" alt="Dapur Bibi" class="hero-main-image">
             </div>
-          </div>
         </div>
       </section>
 
