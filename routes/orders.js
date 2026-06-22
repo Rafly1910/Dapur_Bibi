@@ -1,15 +1,20 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../database');
+const { verifyToken } = require('../middleware/auth');
+
 async function generateOrderCode() {
   const now = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, '');
   const isProd = process.env.DATABASE_URL ? true : false;
   
+  // Cross-platform query for today's count
   const sql = isProd ? 
     "SELECT COUNT(*) as c FROM orders WHERE date(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') = CURRENT_DATE" :
     "SELECT COUNT(*) as c FROM orders WHERE date(created_at) = date('now','localtime')";
     
   const res = await db.safeGet(sql);
-  
-  // PERBAIKAN: Mencegah error jika database masih kosong (res tidak punya properti 'c')
+  // Mencegah error jika database masih kosong
   const count = (res && res.c) ? parseInt(res.c) + 1 : 1; 
   return `DB-${date}-${String(count).padStart(3, '0')}`;
 }
@@ -38,7 +43,6 @@ router.post('/', async (req, res) => {
       validatedItems.push({ product, qty, subtotal });
     }
 
-    // PERBAIKAN: Cek dulu apakah fungsi beginTransaction ada di database.js
     if (typeof db.beginTransaction === 'function') await db.beginTransaction();
     
     const code = await generateOrderCode();
@@ -48,7 +52,7 @@ router.post('/', async (req, res) => {
     );
 
     const orderRecord = await db.safeGet('SELECT id FROM orders WHERE order_code = ?', [code]);
-    if (!orderRecord) throw new Error("Gagal menyimpan data pesanan");
+    if (!orderRecord) throw new Error("Gagal mengambil data pesanan setelah disimpan");
     const oid = orderRecord.id;
 
     for (const it of validatedItems) {
@@ -59,20 +63,83 @@ router.post('/', async (req, res) => {
     }
     
     const order = await db.safeGet('SELECT * FROM orders WHERE id = ?', [oid]);
-    
-    // PERBAIKAN: Cek dulu apakah fungsi commit ada
     if (typeof db.commit === 'function') await db.commit();
     
     res.status(201).json({ message: 'Pesanan berhasil dibuat', order_code: order.order_code, total_price: order.total_price, order_id: order.id });
   } catch (err) {
     console.error("Error memproses pesanan:", err.message);
     
-    // PERBAIKAN: Hapus panggian db.rollback() secara langsung, gunakan pengecekan aman
     if (typeof db.rollback === 'function') {
       try { await db.rollback(); } catch(e) {}
     }
     
-    // Pastikan error selalu dikembalikan ke frontend
-    return res.status(500).json({ error: err.message || 'Terjadi kesalahan di server saat memproses pesanan.' });
+    return res.status(500).json({ error: err.message || 'Terjadi kesalahan internal server' });
   }
 });
+
+// GET /api/orders — Admin
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const { status, date_from, date_to, search } = req.query;
+    let query = 'SELECT * FROM orders WHERE 1=1';
+    const params = [];
+
+    if (status && status !== 'semua') { query += ' AND status = ?'; params.push(status); }
+    if (date_from) { query += ' AND date(created_at) >= ?'; params.push(date_from); }
+    if (date_to) { query += ' AND date(created_at) <= ?'; params.push(date_to); }
+    if (search) { query += ' AND (customer_name LIKE ? OR order_code LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+
+    query += ' ORDER BY created_at DESC';
+    const list = await db.safeQuery(query, params);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/orders/:id — Admin
+router.get('/:id', verifyToken, async (req, res) => {
+  try {
+    const order = await db.safeGet('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+    const items = await db.safeQuery('SELECT * FROM order_items WHERE order_id = ?', [req.params.id]);
+    res.json({ ...order, items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/orders/:id/status — Admin
+router.put('/:id/status', verifyToken, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const valid = ['menunggu', 'diproses', 'selesai', 'dibatalkan'];
+    if (!valid.includes(status)) return res.status(400).json({ error: 'Status tidak valid' });
+    const order = await db.safeGet('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+    await db.safeRun('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
+    const updated = await db.safeGet('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/orders/:id/confirm-payment — Admin
+router.put('/:id/confirm-payment', verifyToken, async (req, res) => {
+  try {
+    const order = await db.safeGet('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+    await db.safeRun("UPDATE orders SET payment_status = 'sudah_bayar' WHERE id = ?", [req.params.id]);
+    // Auto update status jika masih 'menunggu'
+    if (order.status === 'menunggu') {
+      await db.safeRun("UPDATE orders SET status = 'diproses' WHERE id = ?", [req.params.id]);
+    }
+    const updated = await db.safeGet('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
