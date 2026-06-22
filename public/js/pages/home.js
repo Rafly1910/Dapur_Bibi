@@ -113,7 +113,7 @@ async function loadBestSeller() {
         <img src="${imgSrc}" alt="${product.name}" class="hero-main-image">
         
         <div style="position: absolute; bottom: 16px; right: 16px; background: rgba(255,255,255,0.95); padding: 8px 16px; border-radius: var(--radius-md); font-weight: 700; color: var(--color-primary); box-shadow: var(--shadow-md); font-size: 0.9rem; backdrop-filter: blur(4px);">
-          ⭐ ${product.name} (Terlaris!)
+          ⭐ ${product.name} (Best Seller!)
         </div>
       `;
     }
