@@ -45,11 +45,18 @@ function filterAdminProducts() {
 function renderProductsTable(list) {
   const c = document.getElementById('prod-table');
   if (!list.length) { c.innerHTML = '<div class="no-results"><div class="icon">🍽️</div><p>Belum ada menu</p></div>'; return; }
+  
   c.innerHTML = `<table>
     <thead><tr><th>Gambar</th><th>Nama Menu</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead>
-    <tbody>${list.map(p => `
+    <tbody>${list.map(p => {
+      // Deteksi apakah gambar menggunakan link dari luar atau gambar bawaan lama
+      const imgSrc = p.image_filename 
+        ? (p.image_filename.startsWith('http') ? p.image_filename : `/uploads/${p.image_filename}`) 
+        : '';
+        
+      return `
       <tr>
-        <td><div class="product-thumb">${p.image_filename?`<img src="/uploads/${p.image_filename}" alt="${p.name}">`:`<span>${getCategoryEmoji(p.category)}</span>`}</div></td>
+        <td><div class="product-thumb">${imgSrc ? `<img src="${imgSrc}" alt="${p.name}">` : `<span>${getCategoryEmoji(p.category)}</span>`}</div></td>
         <td><div style="font-weight:600;color:var(--color-secondary)">${p.name}</div><div style="font-size:0.78rem;color:var(--color-text-3);margin-top:2px">${(p.description||'').substring(0,50)}${p.description&&p.description.length>50?'...':''}</div></td>
         <td><span class="badge badge-primary">${p.category}</span></td>
         <td style="font-weight:700;color:var(--color-primary)">${formatRupiah(p.price)}</td>
@@ -59,11 +66,14 @@ function renderProductsTable(list) {
           <button class="btn btn-outline btn-sm" onclick="openEditProductModal(${p.id})">✏️ Edit</button>
           <button class="btn btn-danger btn-sm" onclick="confirmDeleteProduct(${p.id},'${p.name.replace(/'/g,"\\'")}')">🗑️</button>
         </div></td>
-      </tr>`).join('')}
+      </tr>`}).join('')}
     </tbody></table>`;
 }
 
 function productFormHTML(p = null) {
+  // Ambil link yang sudah ada (jika sedang mode edit)
+  const existingLink = p && p.image_filename && p.image_filename.startsWith('http') ? p.image_filename : '';
+
   return `
     <div class="form-group"><label class="form-label">Nama Menu *</label>
       <input type="text" class="form-control" id="pf-name" value="${p?p.name:''}" placeholder="Nama makanan/minuman"></div>
@@ -89,22 +99,33 @@ function productFormHTML(p = null) {
           <option value="0" ${p&&p.is_active===0?'selected':''}>Nonaktif</option>
         </select></div>
     </div>
-    <div class="form-group"><label class="form-label">Foto Menu</label>
-      <div class="image-upload-area">
-        <input type="file" id="pf-img" accept="image/*">
-        <div id="upload-ph"><div class="upload-icon">📷</div><div class="upload-text">Klik atau drag gambar (PNG/JPG, max 5MB)</div></div>
-        ${p&&p.image_filename?`<img src="/uploads/${p.image_filename}" class="image-preview" id="img-prev">`:`<img class="image-preview hidden" id="img-prev">`}
-      </div></div>`;
+    
+    <div class="form-group"><label class="form-label">Link Foto Menu (Opsional)</label>
+      <input type="text" class="form-control" id="pf-img-url" value="${existingLink}" placeholder="Contoh: https://i.postimg.cc/gambar.jpg">
+      <small style="color:var(--color-text-3); font-size: 0.8rem; margin-top: 4px;">* Anda bisa menyalin link gambar dari Postimages, Imgur, atau Google.</small>
+      <div style="margin-top: 12px; text-align: center; background: var(--color-surface-2); border-radius: var(--radius-md); padding: 8px;">
+        <img id="img-prev" class="image-preview ${existingLink ? '' : 'hidden'}" src="${existingLink}" style="max-height: 160px; object-fit: contain; width: 100%;">
+      </div>
+    </div>`;
 }
 
 function attachImagePreview() {
-  const inp = document.getElementById('pf-img');
-  if (inp) inp.addEventListener('change', (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = (ev) => { const prev = document.getElementById('img-prev'); prev.src = ev.target.result; prev.classList.remove('hidden'); };
-    r.readAsDataURL(f);
-  });
+  const inp = document.getElementById('pf-img-url');
+  const prev = document.getElementById('img-prev');
+  
+  if (inp && prev) {
+    inp.addEventListener('input', (e) => {
+      const url = e.target.value.trim();
+      // Memeriksa apakah link diawali dengan http/https
+      if (url.startsWith('http')) {
+        prev.src = url;
+        prev.classList.remove('hidden');
+      } else {
+        prev.classList.add('hidden');
+        prev.src = '';
+      }
+    });
+  }
 }
 
 function openAddProductModal() {
@@ -125,19 +146,34 @@ function openEditProductModal(id) {
 async function saveProduct(id) {
   const name = document.getElementById('pf-name').value.trim();
   const price = document.getElementById('pf-price').value;
+  
   if (!name || !price) { showToast('Nama dan harga wajib diisi', 'error'); return; }
+  
   const fd = new FormData();
-  fd.append('name', name); fd.append('category', document.getElementById('pf-cat').value);
-  fd.append('price', price); fd.append('description', document.getElementById('pf-desc').value.trim());
+  fd.append('name', name); 
+  fd.append('category', document.getElementById('pf-cat').value);
+  fd.append('price', price); 
+  fd.append('description', document.getElementById('pf-desc').value.trim());
   fd.append('stock', document.getElementById('pf-stock').value);
   fd.append('is_active', document.getElementById('pf-active').value);
-  const imgFile = document.getElementById('pf-img').files[0];
-  if (imgFile) fd.append('image', imgFile);
+  
+  // Mengambil link gambar dari inputan
+  const imgUrl = document.getElementById('pf-img-url').value.trim();
+  if (imgUrl) fd.append('image_url', imgUrl);
+
   try {
-    if (id) { await Products.update(id, fd); showToast('Menu diperbarui!', 'success'); }
-    else { await Products.create(fd); showToast('Menu ditambahkan!', 'success'); }
-    closeModal(); await loadAdminProducts();
-  } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    if (id) { 
+      await Products.update(id, fd); 
+      showToast('Menu diperbarui!', 'success'); 
+    } else { 
+      await Products.create(fd); 
+      showToast('Menu ditambahkan!', 'success'); 
+    }
+    closeModal(); 
+    await loadAdminProducts();
+  } catch (e) { 
+    showToast('Gagal: ' + e.message, 'error'); 
+  }
 }
 
 function confirmDeleteProduct(id, name) {

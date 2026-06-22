@@ -106,14 +106,16 @@ async function loadBestSeller() {
     const container = document.getElementById('bestseller-container');
     
     if (container && product) {
-      // Sesuaikan pembacaan gambar dengan database Anda
-      const imgSrc = product.image_filename ? `/uploads/${product.image_filename}` : '/img/nasi-goreng.jpg'; 
+      // Deteksi otomatis URL vs Lokal untuk Menu Terlaris
+      const imgSrc = product.image_filename 
+        ? (product.image_filename.startsWith('http') ? product.image_filename : `/uploads/${product.image_filename}`) 
+        : '/img/nasi-goreng.jpg'; 
       
       container.innerHTML = `
         <img src="${imgSrc}" alt="${product.name}" class="hero-main-image">
         
         <div style="position: absolute; bottom: 16px; right: 16px; background: rgba(255,255,255,0.95); padding: 8px 16px; border-radius: var(--radius-md); font-weight: 700; color: var(--color-primary); box-shadow: var(--shadow-md); font-size: 0.9rem; backdrop-filter: blur(4px);">
-          ⭐ ${product.name} (Best Seller!)
+          ⭐ ${product.name} (Terlaris!)
         </div>
       `;
     }

@@ -95,7 +95,11 @@ function getCategoryEmoji(cat) {
   return { 'Makan Berat': '🍚', 'Lauk Pauk': '🍗', 'Camilan': '🍪', 'Minuman': '🥤' }[cat] || '🍽️';
 }
 function getProductImg(product, h = '180px') {
-  if (product.image_filename) return `<img src="/uploads/${product.image_filename}" alt="${product.name}" style="width:100%;height:${h};object-fit:cover;">`;
+  if (product.image_filename) {
+    // Otomatis mendeteksi apakah itu Link URL atau file lokal
+    const src = product.image_filename.startsWith('http') ? product.image_filename : `/uploads/${product.image_filename}`;
+    return `<img src="${src}" alt="${product.name}" style="width:100%;height:${h};object-fit:cover;">`;
+  }
   const c = getCategoryColor(product.category);
   const e = getCategoryEmoji(product.category);
   return `<div style="width:100%;height:${h};display:flex;align-items:center;justify-content:center;font-size:3rem;background:linear-gradient(135deg,${c}18,${c}30)">${e}</div>`;
