@@ -23,6 +23,7 @@ async function initReportsPage() {
             <label>Sampai:</label>
             <input type="date" class="form-control" id="rpt-to" value="${today}" style="max-width:155px">
             <button class="btn btn-primary btn-sm" onclick="loadReportData()">Terapkan</button>
+            <button class="btn btn-success btn-sm" onclick="downloadReportCSV()" style="margin-left: 8px;">📥 Download CSV</button>
           </div>
         </div>
         <div class="stats-grid" id="rpt-stats">
@@ -116,4 +117,68 @@ async function loadReportData() {
         </tbody></table>`;
 
   } catch (e) { showToast('Gagal memuat laporan: ' + e.message, 'error'); }
+}
+
+// ==========================================
+// FUNGSI BARU UNTUK MENGUNDUH CSV
+// ==========================================
+async function downloadReportCSV() {
+  const from = document.getElementById('rpt-from').value;
+  const to = document.getElementById('rpt-to').value;
+
+  try {
+    showToast('Menyiapkan file CSV...', 'info');
+
+    // Ambil semua data pesanan dengan status 'selesai' dari backend
+    let url = '/api/orders?status=selesai';
+    if (from) url += `&date_from=${from}`;
+    if (to) url += `&date_to=${to}`;
+
+    const token = localStorage.getItem('db_token');
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    const orders = await res.json();
+
+    if (!res.ok) throw new Error(orders.error || 'Gagal mengambil data');
+    if (!orders || orders.length === 0) {
+      showToast('Tidak ada data penjualan pada rentang tanggal tersebut', 'warning');
+      return;
+    }
+
+    // Buat Header Tabel CSV
+    let csvContent = "Kode Pesanan,Waktu Pesanan,Nama Pelanggan,Tipe Pengiriman,Metode Pembayaran,Total Belanja\n";
+
+    // Isi Baris Data
+    orders.forEach(o => {
+      // Hapus tanda koma bawaan dari tanggal agar tidak mengacaukan kolom CSV
+      const tanggal = new Date(o.created_at).toLocaleString('id-ID').replace(/,/g, ''); 
+      const kode = o.order_code;
+      // Nama dibungkus tanda kutip jika pelanggan iseng memakai koma di namanya
+      const pelanggan = `"${o.customer_name.replace(/"/g, '""')}"`; 
+      const tipe = o.delivery_type === 'delivery' ? 'Antar' : 'Ambil';
+      const bayar = o.payment_method.toUpperCase();
+      const total = o.total_price;
+
+      csvContent += `${kode},${tanggal},${pelanggan},${tipe},${bayar},${total}\n`;
+    });
+
+    // Proses konversi string jadi file dan langsung Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const urlBlob = URL.createObjectURL(blob);
+    link.setAttribute("href", urlBlob);
+    
+    // Nama file otomatis disesuaikan dengan filter tanggal
+    const fileName = `Laporan_Penjualan_DapurBibi_${from || 'Semua'}_sd_${to || 'Semua'}.csv`;
+    link.setAttribute("download", fileName);
+    
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast('Berhasil mengunduh laporan CSV!', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Gagal mengunduh: ' + err.message, 'error');
+  }
 }
