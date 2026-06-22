@@ -8,8 +8,9 @@ async function generateOrderCode() {
     "SELECT COUNT(*) as c FROM orders WHERE date(created_at) = date('now','localtime')";
     
   const res = await db.safeGet(sql);
-  // PERBAIKAN: Beri fallback '0' jika res undefined agar tidak error
-  const count = res && res.c ? parseInt(res.c) + 1 : 1; 
+  
+  // PERBAIKAN: Mencegah error jika database masih kosong (res tidak punya properti 'c')
+  const count = (res && res.c) ? parseInt(res.c) + 1 : 1; 
   return `DB-${date}-${String(count).padStart(3, '0')}`;
 }
 
@@ -37,7 +38,7 @@ router.post('/', async (req, res) => {
       validatedItems.push({ product, qty, subtotal });
     }
 
-    // PERBAIKAN: Pastikan fungsi ada sebelum dipanggil untuk menghindari crash
+    // PERBAIKAN: Cek dulu apakah fungsi beginTransaction ada di database.js
     if (typeof db.beginTransaction === 'function') await db.beginTransaction();
     
     const code = await generateOrderCode();
@@ -47,7 +48,7 @@ router.post('/', async (req, res) => {
     );
 
     const orderRecord = await db.safeGet('SELECT id FROM orders WHERE order_code = ?', [code]);
-    if (!orderRecord) throw new Error('Gagal mengambil data pesanan setelah disimpan');
+    if (!orderRecord) throw new Error("Gagal menyimpan data pesanan");
     const oid = orderRecord.id;
 
     for (const it of validatedItems) {
@@ -58,21 +59,20 @@ router.post('/', async (req, res) => {
     }
     
     const order = await db.safeGet('SELECT * FROM orders WHERE id = ?', [oid]);
+    
+    // PERBAIKAN: Cek dulu apakah fungsi commit ada
     if (typeof db.commit === 'function') await db.commit();
     
     res.status(201).json({ message: 'Pesanan berhasil dibuat', order_code: order.order_code, total_price: order.total_price, order_id: order.id });
-    
   } catch (err) {
-    // PERBAIKAN: Tangkap error dengan aman, lalu paksakan kirim status 500
-    console.error("🔴 Error saat memproses pesanan:", err.message);
+    console.error("Error memproses pesanan:", err.message);
     
-    try {
-      if (typeof db.rollback === 'function') await db.rollback();
-    } catch (rollbackErr) {
-      console.error("Gagal melakukan rollback:", rollbackErr.message);
+    // PERBAIKAN: Hapus panggian db.rollback() secara langsung, gunakan pengecekan aman
+    if (typeof db.rollback === 'function') {
+      try { await db.rollback(); } catch(e) {}
     }
     
-    // Pastikan respons 500 selalu terkirim ke frontend
-    return res.status(500).json({ error: err.message || 'Terjadi kesalahan internal server' });
+    // Pastikan error selalu dikembalikan ke frontend
+    return res.status(500).json({ error: err.message || 'Terjadi kesalahan di server saat memproses pesanan.' });
   }
 });
