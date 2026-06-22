@@ -22,7 +22,7 @@ const ROUTES = {
   'menu': initMenuPage,
   'cart': initCartPage,
   'checkout': initCheckoutPage,
-  'tracking': initTrackingPage,
+  'track': initTrackPage,   
   'login': initLoginPage,
   'admin/dashboard': () => requireAdmin(initDashboardPage),
   'admin/products': () => requireAdmin(initProductsPage),
