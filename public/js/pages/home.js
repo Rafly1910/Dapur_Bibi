@@ -98,7 +98,7 @@ function initHomePage() {
               </div>
             </div>
           </div>
-          <div class="footer-bottom">© ${new Date().getFullYear()} DapurBibi. Dibuat dengan ❤️ untuk UMKM Indonesia.</div>
+          <div class="footer-bottom">© ${new Date().getFullYear()} DapurBibi</div>
         </div>
       </footer>
     </div>`;
