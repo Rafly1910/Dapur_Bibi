@@ -17,10 +17,13 @@ function initHomePage() {
               <button class="btn btn-outline btn-lg" onclick="document.getElementById('cara-pesan').scrollIntoView({behavior:'smooth'})">Cara Pesan</button>
             </div>
           </div>
-            <div class="hero-image-wrapper">
-            <img src="/img/Dapur Bibi.png" alt="Dapur Bibi" class="hero-main-image">
+          
+          <div class="hero-image-wrapper" id="bestseller-container" style="position: relative;">
+            <div style="height: 400px; display: flex; align-items: center; justify-content: center; background: var(--color-surface-2);">
+               <div class="spinner"></div>
             </div>
-        </div>
+          </div>
+          </div>
       </section>
 
       <section class="categories-section">
