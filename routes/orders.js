@@ -8,13 +8,11 @@ async function generateOrderCode() {
   const date = now.toISOString().slice(0, 10).replace(/-/g, '');
   const isProd = process.env.DATABASE_URL ? true : false;
   
-  // Cross-platform query for today's count
   const sql = isProd ? 
     "SELECT COUNT(*) as c FROM orders WHERE date(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') = CURRENT_DATE" :
     "SELECT COUNT(*) as c FROM orders WHERE date(created_at) = date('now','localtime')";
     
   const res = await db.safeGet(sql);
-  // Mencegah error jika database masih kosong
   const count = (res && res.c) ? parseInt(res.c) + 1 : 1; 
   return `DB-${date}-${String(count).padStart(3, '0')}`;
 }
@@ -34,26 +32,23 @@ router.post('/', async (req, res) => {
   const validatedItems = [];
 
   try {
-      for (const item of items) {
-        const product = await db.safeGet('SELECT * FROM products WHERE id = ? AND is_active = 1', [item.product_id]);
-        if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
-        const qty = Math.max(1, parseInt(item.quantity));
-        const subtotal = product.price * qty;
-        total_price += subtotal;
-        validatedItems.push({ product, qty, subtotal });
-      }
+    for (const item of items) {
+      const product = await db.safeGet('SELECT * FROM products WHERE id = ? AND is_active = 1', [item.product_id]);
+      if (!product) return res.status(400).json({ error: `Produk ID ${item.product_id} tidak ditemukan` });
+      const qty = Math.max(1, parseInt(item.quantity));
+      const subtotal = product.price * qty;
+      total_price += subtotal;
+      validatedItems.push({ product, qty, subtotal });
+    }
 
-      // ==========================================
-      // TAMBAHAN: Hitung Ongkir di Server
-      // ==========================================
-      let ongkir = 0;
-      if (delivery_type === 'delivery') {
-        ongkir = 10000; // Tarif ongkir harus sama dengan di checkout.js
-        total_price += ongkir; // Tambahkan ke total keseluruhan
-      }
-      // ==========================================
+    // Hitung Ongkir
+    let ongkir = 0;
+    if (delivery_type === 'delivery') {
+      ongkir = 10000;
+      total_price += ongkir;
+    }
 
-      if (typeof db.beginTransaction === 'function') await db.beginTransaction();
+    if (typeof db.beginTransaction === 'function') await db.beginTransaction();
     
     const code = await generateOrderCode();
     await db.safeRun(
@@ -78,12 +73,29 @@ router.post('/', async (req, res) => {
     res.status(201).json({ message: 'Pesanan berhasil dibuat', order_code: order.order_code, total_price: order.total_price, order_id: order.id });
   } catch (err) {
     console.error("Error memproses pesanan:", err.message);
-    
     if (typeof db.rollback === 'function') {
       try { await db.rollback(); } catch(e) {}
     }
-    
     return res.status(500).json({ error: err.message || 'Terjadi kesalahan internal server' });
+  }
+});
+
+// ========================================================================
+// GET /api/orders/track/:code — Public (Customer)
+// Posisi rute ini HARUS di atas /:id agar tidak dianggap sebagai ID pesanan
+// ========================================================================
+router.get('/track/:code', async (req, res) => {
+  try {
+    const order = await db.safeGet('SELECT * FROM orders WHERE order_code = ?', [req.params.code]);
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pesanan tidak ditemukan. Pastikan kode pesanan sudah benar.' });
+    }
+
+    const items = await db.safeQuery('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
+    res.json({ ...order, items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -141,7 +153,6 @@ router.put('/:id/confirm-payment', verifyToken, async (req, res) => {
     const order = await db.safeGet('SELECT * FROM orders WHERE id = ?', [req.params.id]);
     if (!order) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
     await db.safeRun("UPDATE orders SET payment_status = 'sudah_bayar' WHERE id = ?", [req.params.id]);
-    // Auto update status jika masih 'menunggu'
     if (order.status === 'menunggu') {
       await db.safeRun("UPDATE orders SET status = 'diproses' WHERE id = ?", [req.params.id]);
     }
