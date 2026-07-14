@@ -98,9 +98,22 @@ function renderProducts() {
 }
 
 function renderProductCard(p) {
-  const img = p.image_filename
-    ? `<img class="product-img" src="/uploads/${p.image_filename}" alt="${p.name}">`
+  // 1. Tentukan sumber gambar dengan benar (Mengecek URL internet vs Lokal)
+  let imageSource = '';
+  if (p.image_filename) {
+    if (p.image_filename.startsWith('http')) {
+      imageSource = p.image_filename; // Jika dimulai dengan http, gunakan langsung linknya
+    } else {
+      imageSource = `/uploads/${p.image_filename}`; // Jika bukan, tambahkan /uploads/
+    }
+  }
+
+  // 2. Render elemen gambar (img atau div placeholder)
+  const img = imageSource
+    ? `<img class="product-img" src="${imageSource}" alt="${p.name}">`
     : `<div class="product-img-placeholder" style="background:linear-gradient(135deg,${getCategoryColor(p.category)}18,${getCategoryColor(p.category)}30)">${getCategoryEmoji(p.category)}</div>`;
+
+  // 3. Return desain kartunya
   return `
     <div class="product-card">
       <div class="product-img-wrap">
