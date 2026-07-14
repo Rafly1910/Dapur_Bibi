@@ -102,11 +102,14 @@ async function loadBestSeller() {
     const res = await fetch('/api/products/bestseller');
     if (!res.ok) return; 
     
-    const product = await res.json();
+    // Ambil respon API
+    const responseData = await res.json();
+    
+    const product = Array.isArray(responseData) ? responseData[0] : responseData;
+    
     const container = document.getElementById('bestseller-container');
     
     if (container && product) {
-      // Deteksi otomatis URL vs Lokal untuk Menu Terlaris
       const imgSrc = product.image_filename 
         ? (product.image_filename.startsWith('http') ? product.image_filename : `/uploads/${product.image_filename}`) 
         : '/img/nasi-goreng.jpg'; 
@@ -123,3 +126,4 @@ async function loadBestSeller() {
     console.error('Gagal memuat menu terlaris:', err);
   }
 }
+ 
